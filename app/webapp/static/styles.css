@@ -1,0 +1,264 @@
+:root {
+    color-scheme: light dark;
+    font-family: "Inter", "Segoe UI", Tahoma, sans-serif;
+    --bg: var(--tg-theme-secondary-bg-color, #f3f4f6);
+    --surface: var(--tg-theme-bg-color, #ffffff);
+    --surface-soft: rgba(0, 0, 0, 0.05);
+    --text: var(--tg-theme-text-color, #111827);
+    --text-muted: rgba(17, 24, 39, 0.7);
+    --accent: var(--tg-theme-button-color, #3b82f6);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+    --radius: 18px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 12px;
+}
+
+.app {
+    width: min(480px, 100%);
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto;
+    gap: 16px;
+}
+
+.toolbar {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+}
+
+.toolbar button,
+.toolbar input {
+    font: inherit;
+}
+
+.toolbar button {
+    padding: 10px 14px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    cursor: pointer;
+}
+
+.toolbar input[type="date"] {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--surface);
+    color: inherit;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+
+.summary {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow);
+    display: grid;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.summary strong {
+    font-size: 16px;
+}
+
+.toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.toggle input {
+    width: 16px;
+    height: 16px;
+}
+
+.tasks {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+    overflow-y: auto;
+    min-height: 200px;
+}
+
+.task-item {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: grid;
+    gap: 8px;
+    border: 1px solid transparent;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.task-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.task-item[draggable="true"] {
+    cursor: grab;
+}
+
+.task-item__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.task-item__title {
+    font-weight: 600;
+    margin: 0;
+}
+
+.task-item__meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 8px;
+}
+
+.task-item__controls {
+    display: inline-flex;
+    gap: 8px;
+}
+
+.task-item__controls button {
+    font: inherit;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    cursor: pointer;
+    background: var(--surface-soft);
+    color: inherit;
+}
+
+.task-item--done {
+    opacity: 0.6;
+}
+
+.task-item--in-progress {
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.footer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.btn {
+    font: inherit;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    border: none;
+    cursor: pointer;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.btn-accent {
+    background: var(--accent);
+    color: var(--accent-text);
+}
+
+.modal {
+    border: none;
+    padding: 0;
+    background: transparent;
+}
+
+.modal::backdrop {
+    background: rgba(15, 23, 42, 0.35);
+}
+
+.modal__content {
+    display: grid;
+    gap: 14px;
+    padding: 20px;
+    background: var(--surface);
+    border-radius: var(--radius);
+    min-width: min(420px, 90vw);
+    box-shadow: var(--shadow);
+}
+
+.modal__content label {
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+}
+
+.modal__content textarea,
+.modal__content input {
+    font: inherit;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.modal__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.toast {
+    position: fixed;
+    inset: auto 50% 24px auto;
+    transform: translateX(50%) translateY(20px);
+    background: var(--surface);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    font-size: 14px;
+}
+
+.toast--show {
+    opacity: 1;
+    transform: translateX(50%) translateY(0);
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 8px;
+    }
+
+    .app {
+        gap: 12px;
+    }
+
+    .toolbar button {
+        padding: 8px 12px;
+    }
+
+    .task-item {
+        padding: 10px 12px;
+    }
+}
