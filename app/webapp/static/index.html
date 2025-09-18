@@ -1,59 +1,20 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Задачи на день</title>
+    <title>PersonalBot — сферы и задачи</title>
     <link rel="stylesheet" href="/static/styles.css" />
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="/static/script.js" defer></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-    <main class="app" id="app-root">
-        <header class="toolbar">
-            <button id="nav-prev" title="Вчера" aria-label="Предыдущий день">◀</button>
-            <input type="date" id="date-picker" />
-            <button id="nav-next" title="Завтра" aria-label="Следующий день">▶</button>
-        </header>
-
-        <section class="summary" id="summary"></section>
-
-        <label class="toggle">
-            <input type="checkbox" id="toggle-done" />
-            <span>Показывать выполненные</span>
-        </label>
-
-        <section class="tasks" id="task-list" aria-live="polite"></section>
-
-        <footer class="footer">
-            <button class="btn" id="refresh-btn">Обновить</button>
-            <button class="btn btn-accent" id="open-add">Добавить задачу</button>
-        </footer>
-    </main>
-
-    <dialog id="task-modal" class="modal">
-        <form id="task-form" class="modal__content" method="dialog">
-            <h2>Новая задача</h2>
-            <label>
-                Текст
-                <textarea id="task-text" name="text" rows="3" required></textarea>
-            </label>
-            <label>
-                Сфера (опционально)
-                <input type="text" id="task-area" name="area" placeholder="work" />
-            </label>
-            <label>
-                Дата
-                <input type="date" id="task-date" name="date" required />
-            </label>
-            <div class="modal__actions">
-                <button type="button" class="btn" id="cancel-add">Отмена</button>
-                <button type="submit" class="btn btn-accent">Сохранить</button>
-            </div>
-        </form>
-    </dialog>
-
-    <div id="toast" class="toast" role="status" aria-live="assertive"></div>
-
-    <script src="/static/script.js" defer></script>
+    <main id="app-root"></main>
+    <div id="toast-root"></div>
+    <script type="text/babel" data-presets="env,react" src="/static/script.js"></script>
 </body>
 </html>
+

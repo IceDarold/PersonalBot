@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.services import get_task_service
+from app.services import get_area_service, get_task_service
 from app.services.task_service import Occurrence
 
 
@@ -20,16 +20,27 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 task_service = get_task_service()
 
+try:
+    area_service = get_area_service()
+except RuntimeError:
+    area_service = None
+
 
 def occurrence_to_dict(occurrence: Occurrence) -> dict[str, Any]:
     return asdict(occurrence)
 
+
+def _require_area_service():
+    if area_service is None:
+        raise HTTPException(status_code=503, detail="Areas API недоступна: нет подключения к Supabase")
+    return area_service
 
 class TaskCreateRequest(BaseModel):
     tg_id: int = Field(..., description="Telegram user id")
     text: str
     date: str | None = Field(None, description="ISO date (YYYY-MM-DD)")
     area: str | None = None
+    area_id: str | None = None
     tz: str | None = None
 
 
@@ -52,6 +63,23 @@ class ReorderRequest(BaseModel):
 
 class RolloverRequest(BaseModel):
     tg_id: int
+    tz: str | None = None
+
+
+class AreaUpsertRequest(BaseModel):
+    tg_id: int
+    name: str
+    area_id: str | None = None
+    icon: str | None = None
+    short_desc: str | None = None
+    priority: int | None = Field(None, ge=1, le=5)
+    one_thing: str | None = None
+    tz: str | None = None
+
+
+class AreaTouchRequest(BaseModel):
+    tg_id: int
+    note: str | None = None
     tz: str | None = None
 
 
@@ -98,6 +126,7 @@ async def api_create_task(request: TaskCreateRequest) -> JSONResponse:
             text=request.text,
             target_date=request.date,
             area=request.area,
+            area_id=request.area_id,
             tz=request.tz,
         )
     except ValueError as exc:
@@ -145,3 +174,55 @@ async def api_reorder(request: ReorderRequest) -> JSONResponse:
 async def api_rollover(request: RolloverRequest) -> JSONResponse:
     result = task_service.rollover(request.tg_id, tz=request.tz)
     return JSONResponse(content=result)
+
+
+@app.get("/api/areas")
+async def api_list_areas(tg_id: int, tz: str | None = None) -> JSONResponse:
+    service = _require_area_service()
+    payload = service.list_areas(tg_id, tz=tz)
+    return JSONResponse(content=payload)
+
+
+@app.get("/api/areas/{area_id}")
+async def api_area_detail(area_id: str, tg_id: int, tz: str | None = None) -> JSONResponse:
+    service = _require_area_service()
+    try:
+        payload = service.get_area_detail(tg_id, area_id, tz=tz)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return JSONResponse(content=payload)
+
+
+@app.post("/api/areas")
+async def api_area_upsert(request: AreaUpsertRequest) -> JSONResponse:
+    service = _require_area_service()
+    try:
+        new_id = service.upsert_area(
+            tg_id=request.tg_id,
+            area_id=request.area_id,
+            name=request.name,
+            icon=request.icon,
+            short_desc=request.short_desc,
+            priority=request.priority,
+            one_thing=request.one_thing,
+            tz=request.tz,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(content={"id": new_id})
+
+
+@app.post("/api/areas/{area_id}/touch")
+async def api_area_touch(area_id: str, request: AreaTouchRequest) -> JSONResponse:
+    service = _require_area_service()
+    try:
+        service.touch_area(
+            tg_id=request.tg_id,
+            area_id=area_id,
+            note=request.note,
+            tz=request.tz,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return JSONResponse(content={"status": "ok"})
+

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import re
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Sequence
@@ -8,6 +10,7 @@ from typing import Any, Sequence
 from supabase import Client
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+logger = logging.getLogger(__name__)
 
 VALID_STATUSES = {"todo", "in_progress", "done"}
 ROLLOVER_CUTOFF = time(hour=0, minute=10)
@@ -19,6 +22,7 @@ class Occurrence:
     task_id: int
     text: str
     area: str | None
+    area_id: str | None
     status: str
     order_index: int
     target_date: str
@@ -27,7 +31,7 @@ class Occurrence:
     updated_at: str
 
 
-class TaskService:
+class SupabaseTaskService:
     """Task orchestration on top of Supabase/Postgres tables."""
 
     def __init__(self, client: Client, default_timezone: str = "Asia/Nicosia") -> None:
@@ -46,6 +50,7 @@ class TaskService:
         text: str,
         target_date: date | datetime | str | None = None,
         area: str | None = None,
+        area_id: str | None = None,
         tz: str | None = None,
     ) -> tuple[Occurrence, bool]:
         if not text or not text.strip():
@@ -53,25 +58,34 @@ class TaskService:
 
         cleaned_text = text.strip()
         cleaned_area = area.strip() if area else None
+        resolved_area_id = area_id.strip() if area_id else None
 
         user = self._ensure_user(tg_id, tz)
         tz_name = user["tz"]
         normalized_date = self._normalize_date(target_date, tz_name)
         fingerprint = self._fingerprint(tg_id, cleaned_text, cleaned_area, normalized_date)
 
+        if cleaned_area and not resolved_area_id:
+            resolved_area_id = self._match_area(user["id"], cleaned_area)
+
         duplicate = self._find_duplicate(user["id"], fingerprint)
         if duplicate:
             existing = self._fetch_occurrence(duplicate["occurrence_id"])
             return existing, True
 
-        task = self._client.table("task")
-        inserted_task = task.insert(
-            {
-                "user_id": user["id"],
-                "text": cleaned_text,
-                "area": cleaned_area,
-            }
-        ).execute()
+        task_payload = {
+            "user_id": user["id"],
+            "text": cleaned_text,
+            "area": cleaned_area,
+        }
+        if resolved_area_id:
+            task_payload["area_id"] = resolved_area_id
+
+        inserted_task = (
+            self._client.table("task")
+            .insert(task_payload)
+            .execute()
+        )
         if not inserted_task.data:
             raise RuntimeError("Failed to insert task")
         task_row = inserted_task.data[0]
@@ -103,6 +117,18 @@ class TaskService:
         ).execute()
 
         occurrence = self._fetch_occurrence(occurrence_id)
+        if occurrence.area_id:
+            self._log_area_event(
+                occurrence.area_id,
+                user["id"],
+                "task_created",
+                {
+                    "task_id": occurrence.task_id,
+                    "occurrence_id": occurrence.occurrence_id,
+                    "text": occurrence.text,
+                    "target_date": occurrence.target_date,
+                },
+            )
         return occurrence, False
 
     def list_tasks(
@@ -125,7 +151,7 @@ class TaskService:
 
         query = (
             self._client.table("occurrence")
-            .select("id, task_id, status, order_index, target_date, rolled_from, created_at, updated_at, task(text, area)")
+            .select("id, task_id, status, order_index, target_date, rolled_from, created_at, updated_at, task(text, area, area_id)")
             .eq("user_id", user["id"])
             .eq("target_date", normalized_date.isoformat())
             .order("order_index", desc=False)
@@ -184,7 +210,19 @@ class TaskService:
             }
         ).eq("id", occurrence_id).execute()
 
-        return self._fetch_occurrence(occurrence_id)
+        occurrence = self._fetch_occurrence(occurrence_id)
+        if occurrence.area_id:
+            self._log_area_event(
+                occurrence.area_id,
+                user["id"],
+                "status_change",
+                {
+                    "occurrence_id": occurrence.occurrence_id,
+                    "status": occurrence.status,
+                },
+            )
+
+        return occurrence
 
     def reorder(self, tg_id: int, updates: Sequence[tuple[int, int]], tz: str | None = None) -> list[Occurrence]:
         if not updates:
@@ -308,7 +346,7 @@ class TaskService:
     def _fetch_occurrence(self, occurrence_id: int) -> Occurrence:
         response = (
             self._client.table("occurrence")
-            .select("id, task_id, status, order_index, target_date, rolled_from, created_at, updated_at, task(text, area)")
+            .select("id, task_id, status, order_index, target_date, rolled_from, created_at, updated_at, task(text, area, area_id)")
             .eq("id", occurrence_id)
             .single()
             .execute()
@@ -324,6 +362,7 @@ class TaskService:
             task_id=self._to_int(row["task_id"]),
             text=str(task_data.get("text", "")),
             area=task_data.get("area"),
+            area_id=task_data.get("area_id"),
             status=str(row["status"]),
             order_index=self._to_int(row["order_index"]),
             target_date=str(row["target_date"]),
@@ -383,6 +422,60 @@ class TaskService:
             "today": today.isoformat(),
             "yesterday": yesterday.isoformat(),
         }
+
+
+    def _match_area(self, user_id: int, area_name: str) -> str | None:
+        slug = self._slugify(area_name)
+        try:
+            response = (
+                self._client.table("area")
+                .select("id")
+                .eq("user_id", user_id)
+                .eq("slug", slug)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.debug("Area lookup failed for slug %s: %s", slug, exc)
+            response = None
+        rows = response.data if response and response.data else []
+        if rows:
+            return rows[0]["id"]
+        try:
+            response = (
+                self._client.table("area")
+                .select("id")
+                .eq("user_id", user_id)
+                .ilike("name", area_name)
+                .limit(1)
+                .execute()
+            )
+        except Exception as exc:
+            logger.debug("Area name lookup failed for %s: %s", area_name, exc)
+            return None
+        rows = response.data or []
+        if rows:
+            return rows[0]["id"]
+        return None
+
+    def _log_area_event(self, area_id: str, user_id: int, event_type: str, payload: dict[str, Any] | None = None) -> None:
+        try:
+            self._client.table("area_event").insert(
+                {
+                    "area_id": area_id,
+                    "user_id": user_id,
+                    "type": event_type,
+                    "payload": payload or {},
+                }
+            ).execute()
+        except Exception as exc:
+            logger.debug("Failed to log area event %s: %s", event_type, exc)
+
+    @staticmethod
+    def _slugify(value: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip('-')
+        return slug or value.lower()
+
 
     def _resolve_timezone(self, tz_name: str | None) -> str:
         if tz_name:
